@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DropLink</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root {
+  --bg: #08080f;
+  --surface: #10101c;
+  --surface2: #181828;
+  --border: #26263a;
+  --accent: #7c6cf8;
+  --accent-light: #a29bfe;
+  --accent-glow: rgba(124,108,248,0.3);
+  --pink: #f472b6;
+  --pink-glow: rgba(244,114,182,0.28);
+  --green: #34d399;
+  --green-glow: rgba(52,211,153,0.28);
+  --text: #f0eeff;
+  --text2: #a8a8c8;
+  --muted: #55557a;
+  --mono: 'DM Mono', monospace;
+  --sans: 'Syne', sans-serif;
+  --radius: 16px;
+  --tab-h: 64px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+/* BG ambience */
+.bg-glow {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 15% 10%, rgba(124,108,248,0.1) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 40% at 85% 90%, rgba(244,114,182,0.09) 0%, transparent 65%);
+}
+.bg-grid {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    linear-gradient(rgba(124,108,248,0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124,108,248,0.035) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* ── Header ── */
+header {
+  position: relative; z-index: 20;
+  display: flex; align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  background: rgba(8,8,15,0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.logo {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 20px; font-weight: 800; letter-spacing: -0.3px;
+}
+.logo-icon {
+  width: 34px; height: 34px;
+  background: linear-gradient(135deg, var(--accent), var(--pink));
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; flex-shrink: 0;
+}
+.logo em { color: var(--accent); font-style: normal; }
+.max-pill {
+  margin-left: auto;
+  font-family: var(--mono); font-size: 10px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text2); padding: 5px 11px;
+  border-radius: 99px; white-space: nowrap;
+  flex-shrink: 0;
+}
+.max-pill b { color: var(--pink); }
+
+/* ── Tab bar ── */
+.tab-bar {
+  position: relative; z-index: 20;
+  display: flex;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab-btn {
+  flex: 1; height: var(--tab-h);
+  border: none; background: none; cursor: pointer;
+  font-family: var(--sans); font-size: 15px; font-weight: 700;
+  color: var(--muted);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: color 0.2s;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab-btn.active { color: var(--text); }
+.tab-btn.active.send-tab { color: var(--accent-light); }
+.tab-btn.active.recv-tab { color: var(--pink); }
+.tab-indicator {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+  border-radius: 3px 3px 0 0;
+  transform: scaleX(0); transform-origin: center;
+  transition: transform 0.25s cubic-bezier(.34,1.56,.64,1);
+}
+.tab-btn.active .tab-indicator { transform: scaleX(1); }
+.send-tab .tab-indicator { background: var(--accent); }
+.recv-tab .tab-indicator { background: var(--pink); }
+.tab-icon { font-size: 20px; }
+
+/* ── Page container ── */
+.pages {
+  position: relative; z-index: 1;
+  flex: 1; overflow: hidden;
+  display: flex;
+}
+.page {
+  position: absolute; inset: 0;
+  overflow-y: auto;
+  padding: 20px 16px 32px;
+  opacity: 0; pointer-events: none;
+  transform: translateX(30px);
+  transition: opacity 0.28s ease, transform 0.28s ease;
+  -webkit-overflow-scrolling: touch;
+}
+.page.active {
+  opacity: 1; pointer-events: all;
+  transform: translateX(0);
+}
+.page.slide-left { transform: translateX(-30px); }
+
+.page-inner {
+  max-width: 520px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+/* ── Section heading ── */
+.section-title {
+  font-size: 26px; font-weight: 800; letter-spacing: -0.5px;
+  line-height: 1.15;
+}
+.section-sub {
+  font-family: var(--mono); font-size: 12px;
+  color: var(--text2); margin-top: 4px; line-height: 1.5;
+}
+
+/* ── Drop zone ── */
+.drop-zone {
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 36px 20px; text-align: center; cursor: pointer;
+  background: var(--surface); position: relative; overflow: hidden;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+.drop-zone::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse 80% 70% at 50% 50%, rgba(124,108,248,0.07), transparent);
+  opacity: 0; transition: opacity 0.3s;
+}
+.drop-zone:active, .drop-zone.drag-over {
+  border-color: var(--accent); background: rgba(124,108,248,0.06);
+  transform: scale(0.99);
+}
+.drop-zone.drag-over::before { opacity: 1; }
+.drop-icon {
+  font-size: 44px; display: block; margin-bottom: 10px;
+  animation: float 3s ease-in-out infinite;
+}
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+.drop-title { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+.drop-hint {
+  font-family: var(--mono); font-size: 12px;
+  color: var(--text2); line-height: 1.5;
+}
+.drop-hint b { color: var(--accent); }
+
+/* ── File list ── */
+.file-list { display: flex; flex-direction: column; gap: 10px; }
+.file-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 14px;
+  animation: slideIn 0.25s ease;
+}
+@keyframes slideIn { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+.file-badge {
+  width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(124,108,248,0.2), rgba(124,108,248,0.06));
+  border: 1px solid rgba(124,108,248,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 10px; font-weight: 500;
+  color: var(--accent); text-transform: uppercase;
+}
+.file-info { flex: 1; min-width: 0; }
+.file-name {
+  font-size: 14px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.file-size {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--text2); margin-top: 3px;
+}
+.file-del {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: none; border: 1px solid var(--border);
+  color: var(--muted); cursor: pointer; font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.file-del:active { color: var(--pink); border-color: var(--pink); }
+
+/* ── Buttons ── */
+.btn {
+  width: 100%; padding: 16px 20px;
+  border-radius: 14px; border: none; cursor: pointer;
+  font-family: var(--sans); font-size: 16px; font-weight: 700;
+  letter-spacing: 0.2px;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  transition: all 0.18s; -webkit-tap-highlight-color: transparent;
+  min-height: 54px;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.35; pointer-events: none; }
+
+.btn-send {
+  background: linear-gradient(135deg, var(--accent), var(--accent-light));
+  color: #fff; box-shadow: 0 4px 24px var(--accent-glow);
+}
+.btn-recv {
+  background: linear-gradient(135deg, var(--pink), #fb923c);
+  color: #fff; box-shadow: 0 4px 24px var(--pink-glow);
+}
+.btn-dl {
+  background: linear-gradient(135deg, #10b981, var(--green));
+  color: #fff; box-shadow: 0 4px 24px var(--green-glow);
+}
+.btn-outline {
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text); flex: 1;
+  min-height: 48px; font-size: 14px; padding: 12px 16px;
+}
+.btn-outline:active { border-color: var(--accent); color: var(--accent); }
+.btn-row { display: flex; gap: 10px; }
+
+/* ── Code card ── */
+.code-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px 18px;
+  display: none; flex-direction: column; gap: 18px;
+  animation: fadeUp 0.35s ease;
+}
+.code-card.show { display: flex; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+
+.card-row {
+  display: flex; align-items: center;
+  justify-content: space-between; flex-wrap: wrap; gap: 8px;
+}
+.chip {
+  font-family: var(--mono); font-size: 11px;
+  padding: 5px 11px; border-radius: 99px;
+  display: inline-flex; align-items: center; gap: 6px;
+  letter-spacing: 0.3px;
+}
+.chip-wait { background: rgba(124,108,248,0.15); color: var(--accent-light); border: 1px solid rgba(124,108,248,0.25); }
+.chip-live { background: rgba(52,211,153,0.15); color: var(--green); border: 1px solid rgba(52,211,153,0.25); }
+.chip-done { background: rgba(52,211,153,0.2); color: var(--green); border: 1px solid rgba(52,211,153,0.35); }
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: blink 1.4s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+.code-lbl {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase;
+}
+.digits {
+  display: flex; gap: 10px; justify-content: center;
+}
+.digit-box {
+  flex: 1; max-width: 60px; height: 68px;
+  background: var(--surface2);
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 30px; font-weight: 500;
+  color: var(--accent);
+  box-shadow: 0 0 18px var(--accent-glow);
+  animation: popIn 0.4s cubic-bezier(.34,1.56,.64,1) backwards;
+}
+.digit-box:nth-child(1){animation-delay:0.03s}
+.digit-box:nth-child(2){animation-delay:0.09s}
+.digit-box:nth-child(3){animation-delay:0.15s}
+.digit-box:nth-child(4){animation-delay:0.21s}
+.digit-box:nth-child(5){animation-delay:0.27s}
+@keyframes popIn { from{opacity:0;transform:scale(0.6)} to{opacity:1;transform:scale(1)} }
+
+.qr-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+#qrcode {
+  background: #fff; padding: 10px; border-radius: 12px;
+  display: inline-block; line-height: 0;
+}
+
+/* ── Progress ── */
+.progress-card {
+  display: none; flex-direction: column; gap: 10px;
+}
+.progress-card.show { display: flex; }
+.pbar-bg {
+  height: 10px; background: var(--surface2);
+  border-radius: 99px; overflow: hidden;
+}
+.pbar {
+  height: 100%; border-radius: 99px; width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--pink));
+  transition: width 0.12s ease;
+  position: relative;
+}
+.pbar::after {
+  content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 40px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35));
+  animation: shim 1s infinite;
+}
+@keyframes shim { 0%,100%{opacity:0} 50%{opacity:1} }
+.pbar-recv { background: linear-gradient(90deg, var(--pink), #fb923c); }
+.prog-meta {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 12px; color: var(--text2);
+}
+
+/* ── Receive section ── */
+.input-lbl {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--muted); letter-spacing: 1.5px;
+  text-transform: uppercase; margin-bottom: 12px;
+}
+.code-inputs {
+  display: flex; gap: 10px;
+}
+.ci {
+  flex: 1; height: 66px;
+  background: var(--surface); border: 2px solid var(--border);
+  border-radius: 12px; text-align: center;
+  font-family: var(--mono); font-size: 30px; font-weight: 500;
+  color: var(--pink); outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  caret-color: transparent;
+  -webkit-tap-highlight-color: transparent;
+  min-width: 0;
+}
+.ci:focus { border-color: var(--pink); box-shadow: 0 0 16px var(--pink-glow); }
+.ci.ok { border-color: rgba(244,114,182,0.55); }
+
+.or-row {
+  display: flex; align-items: center; gap: 12px;
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  letter-spacing: 2px; text-transform: uppercase;
+}
+.or-line { flex: 1; height: 1px; background: var(--border); }
+
+.qr-tap {
+  background: var(--surface); border: 2px dashed var(--border);
+  border-radius: var(--radius); padding: 28px 20px;
+  text-align: center; cursor: pointer;
+  transition: all 0.2s; -webkit-tap-highlight-color: transparent;
+}
+.qr-tap:active { border-color: var(--pink); background: rgba(244,114,182,0.04); }
+.qr-tap-icon { font-size: 36px; display: block; margin-bottom: 8px; }
+.qr-tap-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.qr-tap-sub { font-family: var(--mono); font-size: 12px; color: var(--text2); }
+
+/* ── Incoming card ── */
+.incoming-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px 18px;
+  display: none; flex-direction: column; gap: 14px;
+  animation: fadeUp 0.35s ease;
+}
+.incoming-card.show { display: flex; }
+.inc-lbl { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; }
+.inc-name { font-size: 20px; font-weight: 800; word-break: break-all; letter-spacing: -0.3px; }
+.inc-meta { font-family: var(--mono); font-size: 12px; color: var(--text2); }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(90px);
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 13px 22px;
+  font-family: var(--mono); font-size: 13px;
+  z-index: 1000; transition: transform 0.3s ease;
+  white-space: nowrap; max-width: calc(100vw - 32px);
+  text-overflow: ellipsis; overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+input[type="file"] { display: none; }
+
+/* ── Desktop layout: side-by-side ── */
+@media (min-width: 820px) {
+  .tab-bar { display: none; }
+  .pages { overflow: visible; }
+  .page {
+    position: static; opacity: 1; pointer-events: all;
+    transform: none; overflow: visible;
+    flex: 1; padding: 36px 28px 40px;
+  }
+  .page.slide-left { transform: none; }
+  .pages {
+    display: flex; flex-direction: row;
+    border-top: none;
+  }
+  .page + .page {
+    border-left: 1px solid var(--border);
+  }
+  .section-title { font-size: 28px; }
+}
+</style>
+</head>
+<body>
+
+<div class="bg-glow"></div>
+<div class="bg-grid"></div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">⬡</div>
+    Drop<em>Link</em>
+  </div>
+  <div class="max-pill">max <b>1 GB</b> / file</div>
+</header>
+
+<!-- Tab bar (mobile only) -->
+<div class="tab-bar">
+  <button class="tab-btn send-tab active" onclick="switchTab('send', this)">
+    <span class="tab-icon">⬆</span> Send
+    <div class="tab-indicator"></div>
+  </button>
+  <button class="tab-btn recv-tab" onclick="switchTab('recv', this)">
+    <span class="tab-icon">⬇</span> Receive
+    <div class="tab-indicator"></div>
+  </button>
+</div>
+
+<div class="pages">
+
+  <!-- ═══════════ SEND PAGE ═══════════ -->
+  <div class="page active" id="sendPage">
+    <div class="page-inner">
+
+      <div>
+        <div class="section-title">Send a File</div>
+        <div class="section-sub">Pick a file and share the code or QR with your receiver.</div>
+      </div>
+
+      <!-- Drop zone -->
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fi').click()">
+        <span class="drop-icon">📦</span>
+        <div class="drop-title">Tap to choose a file</div>
+        <div class="drop-hint">or <b>drag & drop</b> here · max 1 GB</div>
+      </div>
+      <input type="file" id="fi" multiple>
+
+      <!-- File list -->
+      <div class="file-list" id="fileList"></div>
+
+      <!-- Send button -->
+      <button class="btn btn-send" id="sendBtn" disabled onclick="initiateSend()">
+        ⚡ Generate Transfer Code
+      </button>
+
+      <!-- Code card -->
+      <div class="code-card" id="codeCard">
+        <div class="card-row">
+          <span class="code-lbl">Your code</span>
+          <span class="chip chip-wait" id="statusChip"><span class="dot"></span> Waiting…</span>
+        </div>
+        <div class="digits" id="digitRow"></div>
+
+        <!-- QR -->
+        <div class="qr-wrap">
+          <span class="code-lbl">or scan QR</span>
+          <div id="qrcode"></div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-outline" onclick="copyCode()">📋 Copy Code</button>
+          <button class="btn btn-outline" onclick="shareCode()">🔗 Share</button>
+          <button class="btn btn-outline" onclick="saveQR()">⬇ QR</button>
+        </div>
+      </div>
+
+      <!-- Send progress -->
+      <div class="progress-card" id="sendProg">
+        <div class="card-row">
+          <span class="code-lbl" id="sendProgLbl">Sending…</span>
+          <span id="sendSpeed" style="font-family:var(--mono);font-size:11px;color:var(--text2)"></span>
+        </div>
+        <div class="pbar-bg"><div class="pbar" id="sendBar"></div></div>
+        <div class="prog-meta">
+          <span id="sendPct">0%</span>
+          <span id="sendETA">—</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════ RECEIVE PAGE ═══════════ -->
+  <div class="page" id="recvPage">
+    <div class="page-inner">
+
+      <div>
+        <div class="section-title">Receive a File</div>
+        <div class="section-sub">Enter the 5-digit code from the sender — or scan their QR.</div>
+      </div>
+
+      <!-- Code entry -->
+      <div>
+        <div class="input-lbl">Enter 5-digit code</div>
+        <div class="code-inputs">
+          <input class="ci" id="c0" maxlength="1" inputmode="numeric" autocomplete="off">
+          <input class="ci" id="c1" maxlength="1" inputmode="numeric" autocomplete="off">
+          <input class="ci" id="c2" maxlength="1" inputmode="numeric" autocomplete="off">
+          <input class="ci" id="c3" maxlength="1" inputmode="numeric" autocomplete="off">
+          <input class="ci" id="c4" maxlength="1" inputmode="numeric" autocomplete="off">
+        </div>
+      </div>
+
+      <button class="btn btn-recv" id="connectBtn" disabled onclick="connectReceiver()">
+        🔗 Connect &amp; Receive
+      </button>
+
+      <div class="or-row"><div class="or-line"></div>or<div class="or-line"></div></div>
+
+      <!-- QR scan -->
+      <div class="qr-tap" onclick="triggerQRScan()">
+        <span class="qr-tap-icon">📷</span>
+        <div class="qr-tap-title">Scan QR Code</div>
+        <div class="qr-tap-sub">Auto-fills the code for you</div>
+      </div>
+
+      <!-- Incoming file -->
+      <div class="incoming-card" id="incomingCard">
+        <div class="inc-lbl">Incoming File</div>
+        <div class="inc-name" id="incName">—</div>
+        <div class="inc-meta" id="incMeta">—</div>
+        <div class="pbar-bg"><div class="pbar pbar-recv" id="recvBar"></div></div>
+        <div class="prog-meta">
+          <span id="recvPct">0%</span>
+          <span id="recvETA">calculating…</span>
+        </div>
+        <button class="btn btn-dl" id="dlBtn" style="display:none" onclick="downloadFile()">
+          ⬇ Download File
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── State ───
+let files = [], code = null, transferStore = null;
+window._readyFile = null;
+
+// ─── Tab switch ───
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const sendPage = document.getElementById('sendPage');
+  const recvPage = document.getElementById('recvPage');
+  if (tab === 'send') {
+    recvPage.classList.add('slide-left');
+    recvPage.classList.remove('active');
+    sendPage.classList.remove('slide-left');
+    sendPage.classList.add('active');
+  } else {
+    sendPage.classList.remove('active');
+    sendPage.classList.add('slide-left');
+    recvPage.classList.remove('slide-left');
+    recvPage.classList.add('active');
+  }
+}
+
+// ─── Drag & Drop ───
+const dz = document.getElementById('dropZone');
+const fi = document.getElementById('fi');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); addFiles([...e.dataTransfer.files]); });
+fi.addEventListener('change', e => addFiles([...e.target.files]));
+
+function addFiles(newFiles) {
+  const MAX = 1073741824; // 1 GB
+  newFiles.forEach(f => {
+    if (f.size > MAX) { toast('⚠ "' + f.name.substring(0,20) + '…" exceeds 1 GB'); return; }
+    if (files.find(x => x.name === f.name && x.size === f.size)) return;
+    files.push(f);
+  });
+  renderFiles();
+  document.getElementById('sendBtn').disabled = files.length === 0;
+}
+
+function renderFiles() {
+  const list = document.getElementById('fileList');
+  list.innerHTML = '';
+  files.forEach((f, i) => {
+    const ext = f.name.includes('.') ? f.name.split('.').pop().slice(0,4) : '—';
+    const d = document.createElement('div');
+    d.className = 'file-card';
+    d.innerHTML = `
+      <div class="file-badge">${ext}</div>
+      <div class="file-info">
+        <div class="file-name">${f.name}</div>
+        <div class="file-size">${fmtSize(f.size)}</div>
+      </div>
+      <button class="file-del" onclick="delFile(${i})">✕</button>`;
+    list.appendChild(d);
+  });
+}
+
+function delFile(i) {
+  files.splice(i, 1);
+  renderFiles();
+  document.getElementById('sendBtn').disabled = files.length === 0;
+  if (!files.length) {
+    document.getElementById('codeCard').classList.remove('show');
+    document.getElementById('sendProg').classList.remove('show');
+  }
+}
+
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  if (b < 1073741824) return (b/1048576).toFixed(1) + ' MB';
+  return (b/1073741824).toFixed(2) + ' GB';
+}
+
+// ─── Generate code ───
+function initiateSend() {
+  code = String(Math.floor(10000 + Math.random() * 90000));
+
+  // Store transfer data — works for same-device receive
+  // We store as a lightweight registry so the receiver page can find it
+  transferStore = { code, files, ts: Date.now() };
+  window.__transfers = window.__transfers || {};
+  window.__transfers[code] = transferStore;
+
+  // Also persist to sessionStorage for same-tab navigation
+  try {
+    const meta = { code, names: files.map(f=>f.name), sizes: files.map(f=>f.size), types: files.map(f=>f.type), ts: Date.now() };
+    sessionStorage.setItem('droplink_' + code, JSON.stringify(meta));
+  } catch(e) {}
+
+  // Render digits
+  const row = document.getElementById('digitRow');
+  row.innerHTML = '';
+  code.split('').forEach(d => {
+    const el = document.createElement('div');
+    el.className = 'digit-box'; el.textContent = d; row.appendChild(el);
+  });
+
+  // QR
+  document.getElementById('qrcode').innerHTML = '';
+  const qrUrl = location.href.split('?')[0] + '?recv=' + code;
+  new QRCode(document.getElementById('qrcode'), {
+    text: qrUrl, width: 150, height: 150,
+    colorDark: '#7c6cf8', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  document.getElementById('codeCard').classList.add('show');
+  setStatus('wait');
+  document.getElementById('sendBtn').textContent = '🔄 Regenerate Code';
+  document.getElementById('sendProg').classList.remove('show');
+  document.getElementById('sendBar').style.width = '0%';
+}
+
+function setStatus(s) {
+  const chip = document.getElementById('statusChip');
+  if (s === 'wait') { chip.className = 'chip chip-wait'; chip.innerHTML = '<span class="dot"></span> Waiting…'; }
+  if (s === 'live') { chip.className = 'chip chip-live'; chip.innerHTML = '<span class="dot"></span> Receiver connected'; }
+  if (s === 'done') { chip.className = 'chip chip-done'; chip.textContent = '✓ Complete'; }
+}
+
+function copyCode() {
+  if (!code) return;
+  navigator.clipboard.writeText(code).then(() => toast('✓ Code copied!')).catch(() => toast('Code: ' + code));
+}
+
+function shareCode() {
+  if (!code) return;
+  const url = location.href.split('?')[0] + '?recv=' + code;
+  if (navigator.share) {
+    navigator.share({ title: 'DropLink Transfer', text: 'Use code ' + code + ' to receive my file.', url });
+  } else {
+    navigator.clipboard.writeText(url).then(() => toast('🔗 Link copied!')).catch(() => {});
+  }
+}
+
+function saveQR() {
+  const canvas = document.querySelector('#qrcode canvas');
+  if (!canvas) { toast('⚠ Generate a code first'); return; }
+  const a = document.createElement('a');
+  a.download = 'droplink-' + code + '.png';
+  a.href = canvas.toDataURL(); a.click();
+}
+
+// ─── Code inputs ───
+const cis = [0,1,2,3,4].map(i => document.getElementById('c'+i));
+
+cis.forEach((el, i) => {
+  el.addEventListener('focus', () => el.select());
+  el.addEventListener('input', e => {
+    const v = e.target.value.replace(/\D/g,'');
+    el.value = v ? v[v.length-1] : '';
+    el.classList.toggle('ok', !!el.value);
+    if (el.value && i < 4) cis[i+1].focus();
+    checkReady();
+  });
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Backspace') {
+      if (!el.value && i > 0) { cis[i-1].value=''; cis[i-1].classList.remove('ok'); cis[i-1].focus(); }
+      checkReady();
+    }
+    if (e.key === 'ArrowLeft' && i > 0) cis[i-1].focus();
+    if (e.key === 'ArrowRight' && i < 4) cis[i+1].focus();
+  });
+  el.addEventListener('paste', e => {
+    e.preventDefault();
+    const p = (e.clipboardData||window.clipboardData).getData('text').replace(/\D/g,'');
+    p.split('').slice(0,5).forEach((c,j) => {
+      if (cis[i+j]) { cis[i+j].value = c; cis[i+j].classList.add('ok'); }
+    });
+    checkReady();
+  });
+});
+
+function checkReady() {
+  document.getElementById('connectBtn').disabled = cis.map(e=>e.value).join('').length !== 5;
+}
+function enteredCode() { return cis.map(e=>e.value).join(''); }
+
+// ─── Connect & Receive ───
+function connectReceiver() {
+  const entered = enteredCode();
+
+  // Look up transfer — works same device (same window object or sessionStorage)
+  let xfer = null;
+  if (window.__transfers && window.__transfers[entered]) {
+    xfer = window.__transfers[entered];
+  }
+
+  if (!xfer) {
+    toast('✕ Code not found — make sure sender is open on this device');
+    cis.forEach(e => {
+      e.style.borderColor = 'var(--pink)';
+      setTimeout(() => e.style.borderColor = '', 700);
+    });
+    return;
+  }
+
+  // Show incoming
+  const f = xfer.files[0];
+  document.getElementById('incName').textContent = f.name;
+  document.getElementById('incMeta').textContent = fmtSize(f.size) + ' · ' + (f.type || 'unknown');
+  document.getElementById('incomingCard').classList.add('show');
+  document.getElementById('connectBtn').disabled = true;
+  setStatus('live');
+  window._readyFile = f;
+
+  simulateTransfer(f);
+}
+
+function simulateTransfer(f) {
+  document.getElementById('sendProg').classList.add('show');
+  document.getElementById('sendProg').querySelector('.code-lbl').textContent = 'Sending…';
+
+  let pct = 0;
+  const dur = Math.max(2200, Math.min(f.size / (4*1048576) * 1000, 10000));
+  const step = 100 / (dur / 40);
+  const t0 = Date.now();
+
+  const iv = setInterval(() => {
+    pct = Math.min(pct + step*(0.75 + Math.random()*0.5), 100);
+    const elapsed = (Date.now()-t0)/1000 || 0.001;
+    const speed = (f.size*(pct/100))/elapsed;
+    const rem = pct<100 ? Math.ceil((f.size*(1-pct/100))/speed)+'s left' : 'Done!';
+
+    const p = Math.round(pct);
+    document.getElementById('sendBar').style.width = p+'%';
+    document.getElementById('sendPct').textContent = p+'%';
+    document.getElementById('sendETA').textContent = rem;
+    document.getElementById('sendSpeed').textContent = fmtSize(speed)+'/s';
+
+    document.getElementById('recvBar').style.width = p+'%';
+    document.getElementById('recvPct').textContent = p+'%';
+    document.getElementById('recvETA').textContent = rem;
+
+    if (pct >= 100) {
+      clearInterval(iv);
+      setStatus('done');
+      document.getElementById('sendProg').querySelector('.code-lbl').textContent = '✓ Sent!';
+      document.getElementById('dlBtn').style.display = 'flex';
+      toast('✓ Ready! Tap Download to save your file');
+    }
+  }, 40);
+}
+
+// ─── Download ───
+function downloadFile() {
+  const f = window._readyFile;
+  if (!f) { toast('⚠ No file ready'); return; }
+  const url = URL.createObjectURL(f);
+  const a = document.createElement('a');
+  a.href = url; a.download = f.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  toast('⬇ Downloading: ' + f.name);
+}
+
+// ─── QR scan (auto-fill from sender) ───
+function triggerQRScan() {
+  if (code) {
+    code.split('').forEach((c,i) => { cis[i].value = c; cis[i].classList.add('ok'); });
+    checkReady();
+    toast('📷 QR scanned — code filled!');
+  } else {
+    toast('⚠ No active sender code — generate one first on the Send tab');
+  }
+}
+
+// ─── Auto-fill from URL param ───
+(function() {
+  const p = new URLSearchParams(location.search);
+  const r = p.get('recv');
+  if (r && /^\d{5}$/.test(r)) {
+    r.split('').forEach((c,i) => { if(cis[i]){ cis[i].value=c; cis[i].classList.add('ok'); }});
+    checkReady();
+    // Switch to receive tab on mobile
+    const recvBtn = document.querySelector('.recv-tab');
+    if (recvBtn) switchTab('recv', recvBtn);
+    toast('📎 Code ' + r + ' loaded from link!');
+  }
+})();
+
+// ─── Toast ───
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
